@@ -319,7 +319,7 @@
       
       // --- ESTADO DA APLICAÇÃO ---
       const POKE_API_URL = 'https://pokeapi.co/api/v2/pokemon/';
-      const ADVICE_API_URL = 'https://api.adviceslip.com/slip';
+      const ADVICE_API_URL = 'https://api.adviceslip.com/advice'; // <-- LINHA CORRIGIDA
       const pokemonCache = new Map();
       const descriptionCache = new Map();
       let searchHistory = JSON.parse(localStorage.getItem('pokemonHistory')) || [];
