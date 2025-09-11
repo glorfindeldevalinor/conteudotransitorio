@@ -12,7 +12,7 @@
     /* --- Custom Styles --- */
     :root {
       --animation-speed: 500ms;
-      --carousel-interval: 5000ms;
+      --carousel-interval: 6000ms; /* Aumentei um pouco para dar tempo de ler */
     }
 
     body {
@@ -55,36 +55,53 @@
       overflow: hidden;
       border-radius: var(--border-radius);
       box-shadow: var(--card-box-shadow);
+      min-height: 120px; /* Altura mínima para o loader */
     }
     .carousel-track {
       display: flex;
       transition: transform var(--animation-speed) ease-in-out;
+      height: 100%;
     }
     .carousel-slide {
       min-width: 100%;
       box-sizing: border-box;
-      padding: 2rem 4rem;
+      padding: 2rem 4.5rem; /* Mais padding para os novos botões */
       text-align: center;
+      display: flex;
+      justify-content: center;
+      align-items: center;
     }
     .carousel-slide blockquote {
         margin: 0;
         font-style: italic;
     }
+    /* NOVO ESTILO DOS BOTÕES */
     .carousel-btn {
       position: absolute;
       top: 50%;
       transform: translateY(-50%);
-      background: rgba(0,0,0,0.2);
-      color: white;
+      background: rgba(0,0,0,0.1);
       border: none;
       border-radius: 50%;
-      width: 2.5rem;
-      height: 2.5rem;
+      width: 3rem;
+      height: 3rem;
       cursor: pointer;
       z-index: 10;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background-color 0.2s ease;
+    }
+    .carousel-btn:hover {
+        background: rgba(0,0,0,0.3);
     }
     .carousel-btn.prev { left: 0.5rem; }
     .carousel-btn.next { right: 0.5rem; }
+    .carousel-btn svg {
+        width: 1.5rem;
+        height: 1.5rem;
+        fill: #ffffff;
+    }
     .carousel-nav {
       position: absolute;
       bottom: 0.75rem;
@@ -233,12 +250,16 @@
       <h1>Pokédex Minimal</h1>
     </header>
 
-    <section id="carousel-section" aria-label="Citações Inspiradoras">
+    <section id="carousel-section" aria-label="Conselhos Aleatórios">
       <div class="carousel-container">
         <div class="carousel-track">
           </div>
-        <button class="carousel-btn prev" aria-label="Citação Anterior">&lt;</button>
-        <button class="carousel-btn next" aria-label="Próxima Citação">&gt;</button>
+        <button class="carousel-btn prev" aria-label="Conselho Anterior">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+        </button>
+        <button class="carousel-btn next" aria-label="Próximo Conselho">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
+        </button>
         <div class="carousel-nav">
           </div>
       </div>
@@ -298,8 +319,9 @@
       
       // --- ESTADO DA APLICAÇÃO ---
       const POKE_API_URL = 'https://pokeapi.co/api/v2/pokemon/';
+      const ADVICE_API_URL = 'https://api.adviceslip.com/slip';
       const pokemonCache = new Map();
-      const descriptionCache = new Map(); // Cache para descrições de golpes/habilidades
+      const descriptionCache = new Map();
       let searchHistory = JSON.parse(localStorage.getItem('pokemonHistory')) || [];
 
       // --- CORES DOS TIPOS DE POKÉMON ---
@@ -311,33 +333,26 @@
         steel: '#B7B7CE', fairy: '#D685AD'
       };
       
-      // --- LÓGICA DE BUSCA E RENDERIZAÇÃO ---
+      // --- LÓGICA DE BUSCA E RENDERIZAÇÃO POKÉMON ---
       
       const fetchPokemon = async (query) => {
         const searchTerm = String(query).toLowerCase().trim();
         if (!searchTerm) return;
-
         loader.classList.remove('hidden');
         errorMessage.classList.add('hidden');
         resultArea.innerHTML = '';
-
         if (pokemonCache.has(searchTerm)) {
           displayPokemon(pokemonCache.get(searchTerm));
           loader.classList.add('hidden');
           return;
         }
-
         try {
           const response = await fetch(`${POKE_API_URL}${searchTerm}`);
-          if (!response.ok) {
-            throw new Error('Pokémon não encontrado.');
-          }
+          if (!response.ok) throw new Error('Pokémon não encontrado.');
           const data = await response.json();
-          
           pokemonCache.set(searchTerm, data);
           updateSearchHistory(data.name);
           displayPokemon(data);
-
         } catch (error) {
           displayError(error.message || 'Tente outro nome ou número.');
         } finally {
@@ -352,73 +367,50 @@
               <h2>${data.name}</h2>
               <span class="pokemon-id">#${data.id.toString().padStart(4, '0')}</span>
             </header>
-            
             <div class="pokemon-types">
               ${data.types.map(typeInfo => `<span class="type-chip" style="background-color: ${typeColors[typeInfo.type.name] || '#777'}">${typeInfo.type.name}</span>`).join('')}
             </div>
-
             <img src="${data.sprites.other['official-artwork'].front_default || data.sprites.front_default}" alt="Arte oficial de ${data.name}" class="main-sprite official-artwork" loading="lazy">
-            
             <details>
               <summary>Sprites por Geração</summary>
-              <div class="sprites-grid">
-                ${generateSpritesGrid(data.sprites.versions)}
-              </div>
+              <div class="sprites-grid">${generateSpritesGrid(data.sprites.versions)}</div>
             </details>
-
             <details>
               <summary>Habilidades</summary>
               <ul id="abilities-list">
                 ${data.abilities.map(abilityInfo => `
                   <li>
-                    <button class="clickable-item" 
-                            data-url="${abilityInfo.ability.url}" 
-                            data-name="${abilityInfo.ability.name}"
-                            data-type="Habilidade">
+                    <button class="clickable-item" data-url="${abilityInfo.ability.url}" data-name="${abilityInfo.ability.name}" data-type="Habilidade">
                       ${abilityInfo.ability.name.replace(/-/g, ' ')}
                     </button>
                   </li>`).join('')}
               </ul>
             </details>
-
             <details>
               <summary>Golpes</summary>
-              <ul id="moves-list">
-                </ul>
+              <ul id="moves-list"></ul>
               ${data.moves.length > 20 ? `<button id="toggle-moves-btn" data-pokemon-moves='${JSON.stringify(data.moves.map(m => m.move))}'>Ver mais</button>` : ''}
             </details>
           </article>
         `;
-
         renderMoves(data.moves.map(m => m.move));
-        
         const toggleMovesBtn = document.getElementById('toggle-moves-btn');
         if (toggleMovesBtn) {
             toggleMovesBtn.addEventListener('click', handleToggleMoves);
         }
-
         document.getElementById('pokemon-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
       };
 
       const generateSpritesGrid = (versions) => {
         let spritesHtml = '';
-        const generationOrder = [
-          'generation-i', 'generation-ii', 'generation-iii', 'generation-iv', 
-          'generation-v', 'generation-vi', 'generation-vii', 'generation-viii'
-        ];
-
+        const generationOrder = ['generation-i', 'generation-ii', 'generation-iii', 'generation-iv', 'generation-v', 'generation-vi', 'generation-vii', 'generation-viii'];
         generationOrder.forEach(genKey => {
           if (versions[genKey]) {
             const genName = genKey.replace('-', ' ').toUpperCase();
             const gameKey = Object.keys(versions[genKey])[0];
             const spriteUrl = versions[genKey][gameKey].front_default;
             if (spriteUrl) {
-              spritesHtml += `
-                <figure>
-                  <img src="${spriteUrl}" alt="Sprite de ${genName}" loading="lazy">
-                  <figcaption>${genName}</figcaption>
-                </figure>
-              `;
+              spritesHtml += `<figure><img src="${spriteUrl}" alt="Sprite de ${genName}" loading="lazy"><figcaption>${genName}</figcaption></figure>`;
             }
           }
         });
@@ -428,14 +420,10 @@
       const renderMoves = (moves, showAll = false) => {
         const movesList = document.getElementById('moves-list');
         if (!movesList) return;
-
         const movesToRender = showAll ? moves : moves.slice(0, 20);
         movesList.innerHTML = movesToRender.map(moveInfo => `
           <li>
-            <button class="clickable-item" 
-                    data-url="${moveInfo.url}" 
-                    data-name="${moveInfo.name}"
-                    data-type="Golpe">
+            <button class="clickable-item" data-url="${moveInfo.url}" data-name="${moveInfo.name}" data-type="Golpe">
               ${moveInfo.name.replace(/-/g, ' ')}
             </button>
           </li>`).join('');
@@ -445,7 +433,6 @@
         const button = event.target;
         const moves = JSON.parse(button.dataset.pokemonMoves);
         const isShowingAll = button.textContent === 'Ver menos';
-        
         if (isShowingAll) {
           renderMoves(moves, false);
           button.textContent = 'Ver mais';
@@ -461,26 +448,19 @@
       };
       
       // --- LÓGICA DE DETALHES (MODAL) ---
-      
       const fetchAndShowDetails = async (url, name, type) => {
         modalTitle.textContent = `${type}: ${name.replace(/-/g, ' ')}`;
         modalContent.innerHTML = '<p aria-busy="true">Carregando descrição...</p>';
         detailsModal.showModal();
-
-        // 1. Checar cache
         if (descriptionCache.has(url)) {
             modalContent.innerHTML = descriptionCache.get(url);
             return;
         }
-
-        // 2. Buscar na API
         try {
             const response = await fetch(url);
             if (!response.ok) throw new Error('Falha na rede');
             const data = await response.json();
-            
             let description = '<p>Descrição não encontrada.</p>';
-
             if (type === 'Habilidade') {
                 const effectEntry = data.effect_entries.find(e => e.language.name === 'en');
                 if (effectEntry) description = `<p>${effectEntry.effect}</p>`;
@@ -488,138 +468,133 @@
                 const flavorTextEntry = data.flavor_text_entries.find(e => e.language.name === 'en' && (e.version_group.name === 'scarlet-violet' || e.version_group.name === 'sword-shield'));
                 if (flavorTextEntry) description = `<p>${flavorTextEntry.flavor_text}</p>`;
             }
-            
-            // 3. Salvar no cache e exibir
             descriptionCache.set(url, description);
             modalContent.innerHTML = description;
-
         } catch (error) {
             modalContent.innerHTML = '<p>Não foi possível carregar a descrição.</p>';
         }
       };
 
       // --- LÓGICA DO HISTÓRICO DE BUSCAS ---
-      
       const updateSearchHistory = (searchTerm) => {
         const newHistory = [searchTerm, ...searchHistory.filter(item => item !== searchTerm)];
         searchHistory = newHistory.slice(0, 10);
         localStorage.setItem('pokemonHistory', JSON.stringify(searchHistory));
         renderSearchHistory();
       };
-      
       const renderSearchHistory = () => {
-        historyContainer.innerHTML = searchHistory
-          .map(term => `<button class="outline secondary" data-search="${term}">${term}</button>`)
-          .join('');
+        historyContainer.innerHTML = searchHistory.map(term => `<button class="outline secondary" data-search="${term}">${term}</button>`).join('');
       };
 
-      // --- LÓGICA DO CARROSSEL ---
+      // --- LÓGICA DO CARROSSEL DE CONSELHOS (API) ---
       const carouselTrack = document.querySelector('.carousel-track');
       const carouselNav = document.querySelector('.carousel-nav');
       const prevButton = document.querySelector('.carousel-btn.prev');
       const nextButton = document.querySelector('.carousel-btn.next');
       const carouselContainer = document.querySelector('.carousel-container');
-
-      const quotes = [
-        "Nem todo vagante é vadio.", "Um mago nunca se atrasa.", "Na dúvida, siga seu nariz.",
-        "Há sempre esperança.", "Até a menor pessoa pode mudar o curso do futuro.", "Guarde seus segredos.",
-        "Coragem, Merry. Coragem.", "Eu cuidarei de você, Sam. E eu de você.",
-        "Eu preferiria compartilhar uma vida com você do que enfrentar todas aseras deste mundo sozinha.",
-        "Eu sou Gandalf, e Gandalf significa... eu!"
-      ];
       
+      let adviceSlips = [];
       let currentIndex = 0;
       let slideInterval;
+      let lastApiCallTimestamp = 0;
 
-      const setupCarousel = () => {
-        carouselTrack.innerHTML = quotes.map(q => `<div class="carousel-slide"><blockquote>“${q}”</blockquote></div>`).join('');
-        carouselNav.innerHTML = quotes.map((_, i) => `<button class="carousel-indicator" data-index="${i}"></button>`).join('');
-        
-        updateCarousel();
-        startCarouselInterval();
+      const fetchAdvice = async () => {
+        // Cache de 2 segundos para não sobrecarregar a API
+        if (Date.now() - lastApiCallTimestamp < 2000) return null;
+        lastApiCallTimestamp = Date.now();
+
+        try {
+          const response = await fetch(ADVICE_API_URL);
+          if (!response.ok) return "Não foi possível carregar um novo conselho.";
+          const data = await response.json();
+          return data.slip.advice;
+        } catch (error) {
+          return "Verifique sua conexão de rede.";
+        }
       };
 
-      const slides = () => Array.from(carouselTrack.children);
-      const dots = () => Array.from(carouselNav.children);
+      const addSlide = (advice) => {
+        adviceSlips.push(advice);
+        
+        // Adiciona o slide
+        const slide = document.createElement('div');
+        slide.classList.add('carousel-slide');
+        slide.innerHTML = `<blockquote>“${advice}”</blockquote>`;
+        carouselTrack.appendChild(slide);
 
-      const moveToSlide = (targetIndex) => {
-        currentIndex = targetIndex;
-        updateCarousel();
+        // Adiciona o indicador
+        const indicator = document.createElement('button');
+        indicator.classList.add('carousel-indicator');
+        indicator.dataset.index = adviceSlips.length - 1;
+        carouselNav.appendChild(indicator);
       };
 
       const updateCarousel = () => {
-        const slideWidth = slides()[0].getBoundingClientRect().width;
-        slides().forEach((slide, index) => {
-            slide.style.left = slideWidth * index + 'px';
+        const slideWidth = carouselTrack.clientWidth;
+        carouselTrack.style.transform = `translateX(-${currentIndex * slideWidth}px)`;
+        
+        const indicators = Array.from(carouselNav.children);
+        indicators.forEach((dot, index) => {
+            dot.classList.toggle('current-slide', index === currentIndex);
         });
-        carouselTrack.style.transform = `translateX(-${slides()[currentIndex].style.left})`;
-        dots().forEach(dot => dot.classList.remove('current-slide'));
-        dots()[currentIndex].classList.add('current-slide');
+      };
+      
+      const moveTo = (index) => {
+        currentIndex = index;
+        updateCarousel();
+      };
+      
+      const moveNext = async () => {
+        // Se estamos no último slide, busca um novo
+        if (currentIndex === adviceSlips.length - 1) {
+          const newAdvice = await fetchAdvice();
+          if (newAdvice) {
+            addSlide(newAdvice);
+          }
+        }
+        
+        const nextIndex = (currentIndex + 1) % adviceSlips.length;
+        moveTo(nextIndex);
       };
 
       const startCarouselInterval = () => {
         stopCarouselInterval();
-        slideInterval = setInterval(() => {
-          const nextIndex = (currentIndex + 1) % slides().length;
-          moveToSlide(nextIndex);
-        }, 5000);
+        slideInterval = setInterval(moveNext, 6000);
       };
 
       const stopCarouselInterval = () => clearInterval(slideInterval);
+
+      const setupCarousel = async () => {
+        carouselTrack.innerHTML = '<p aria-busy="true" style="margin: auto;">Carregando conselhos...</p>';
+        // Carrega 3 conselhos iniciais
+        const initialAdvices = await Promise.all([fetchAdvice(), fetchAdvice(), fetchAdvice()]);
+        carouselTrack.innerHTML = '';
+        
+        initialAdvices.filter(advice => advice).forEach(addSlide);
+        
+        if (adviceSlips.length > 0) {
+            updateCarousel();
+            startCarouselInterval();
+        } else {
+            carouselTrack.innerHTML = '<p style="margin: auto;">Não foi possível carregar conselhos.</p>';
+        }
+      };
       
       // --- EVENT LISTENERS ---
-
-      searchForm.addEventListener('submit', (e) => {
-        e.preventDefault();
-        fetchPokemon(searchInput.value);
-        searchInput.value = '';
-      });
-      
-      randomBtn.addEventListener('click', () => {
-        const randomId = Math.floor(Math.random() * 1025) + 1;
-        fetchPokemon(randomId);
-      });
-
-      historyContainer.addEventListener('click', (e) => {
-        if (e.target.tagName === 'BUTTON') {
-          const searchTerm = e.target.dataset.search;
-          searchInput.value = searchTerm;
-          fetchPokemon(searchTerm);
-        }
-      });
-      
-      // Delegação de Eventos para os itens clicáveis
-      resultArea.addEventListener('click', e => {
-        const target = e.target.closest('.clickable-item');
-        if (target) {
-            const { url, name, type } = target.dataset;
-            fetchAndShowDetails(url, name, type);
-        }
-      });
-      
-      // Listeners do Modal
+      searchForm.addEventListener('submit', (e) => { e.preventDefault(); fetchPokemon(searchInput.value); searchInput.value = ''; });
+      randomBtn.addEventListener('click', () => { const randomId = Math.floor(Math.random() * 1025) + 1; fetchPokemon(randomId); });
+      historyContainer.addEventListener('click', (e) => { if (e.target.tagName === 'BUTTON') { const searchTerm = e.target.dataset.search; searchInput.value = searchTerm; fetchPokemon(searchTerm); } });
+      resultArea.addEventListener('click', e => { const target = e.target.closest('.clickable-item'); if (target) { const { url, name, type } = target.dataset; fetchAndShowDetails(url, name, type); } });
       closeModalBtn.addEventListener('click', () => detailsModal.close());
-      detailsModal.addEventListener('click', e => {
-        if (e.target === detailsModal) detailsModal.close();
-      });
-
+      detailsModal.addEventListener('click', e => { if (e.target === detailsModal) detailsModal.close(); });
+      
       // Listeners do Carrossel
-      nextButton.addEventListener('click', () => {
-        const nextIndex = (currentIndex + 1) % slides().length;
-        moveToSlide(nextIndex);
-      });
-
+      nextButton.addEventListener('click', moveNext);
       prevButton.addEventListener('click', () => {
-        const prevIndex = (currentIndex - 1 + slides().length) % slides().length;
-        moveToSlide(prevIndex);
+        const prevIndex = (currentIndex - 1 + adviceSlips.length) % adviceSlips.length;
+        moveTo(prevIndex);
       });
-      
-      carouselNav.addEventListener('click', e => {
-        const targetDot = e.target.closest('button');
-        if (!targetDot) return;
-        moveToSlide(parseInt(targetDot.dataset.index));
-      });
-      
+      carouselNav.addEventListener('click', e => { const targetDot = e.target.closest('button'); if (targetDot) moveTo(parseInt(targetDot.dataset.index)); });
       carouselContainer.addEventListener('mouseenter', stopCarouselInterval);
       carouselContainer.addEventListener('mouseleave', startCarouselInterval);
 
