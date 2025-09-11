@@ -1,62 +1,13 @@
 <!doctype html>
 <html lang="pt-BR">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Pokédex Minimal (Teste)</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Teste GitHub Pages</title>
   <link rel="stylesheet" href="https://unpkg.com/@picocss/pico@2.0.6/css/pico.min.css">
 </head>
 <body class="container">
-  <header><h1>Pokédex Minimal (Teste)</h1></header>
-
-  <form id="f" class="grid" style="align-items:end">
-    <div>
-      <label for="q">Busca</label>
-      <input id="q" placeholder="pikachu ou 25" required>
-    </div>
-    <button>Buscar</button>
-  </form>
-
-  <div id="status" aria-live="polite"></div>
-  <article id="card"></article>
-
-  <script>
-    const API='https://pokeapi.co/api/v2';
-    const f=document.getElementById('f'), q=document.getElementById('q');
-    const statusEl=document.getElementById('status'), card=document.getElementById('card');
-
-    f.addEventListener('submit', async (e)=>{
-      e.preventDefault();
-      const term=q.value.trim().toLowerCase();
-      if(!term) return;
-      statusEl.textContent='Carregando…';
-      card.innerHTML='';
-      try{
-        const r=await fetch(`${API}/pokemon/${encodeURIComponent(term)}`);
-        if(!r.ok) throw new Error('not-found');
-        const d=await r.json();
-        statusEl.textContent='';
-        const art=d?.sprites?.other?.['official-artwork']?.front_default || d?.sprites?.front_default || '';
-        card.innerHTML = `
-          <h2>${d.name} <small class="muted">#${d.id}</small></h2>
-          ${art ? `<img src="${art}" alt="Artwork de ${d.name}" style="max-width:300px">` : ''}
-          <p><strong>Tipos:</strong> ${d.types.map(t=>t.type.name).join(', ')}</p>
-          <p><strong>Habilidades:</strong> ${d.abilities.map(a=>a.ability.name).join(', ')}</p>
-          <details><summary>Golpes (${d.moves.length})</summary>
-            <small>${d.moves.slice(0,20).map(m=>m.move.name).join(', ')}${d.moves.length>20?'…':''}</small>
-          </details>
-        `;
-      }catch{
-        statusEl.innerHTML='<mark role="alert">Pokémon não encontrado. Tente outro nome ou número.</mark>';
-      }
-    });
-
-    // teste rápido automático
-    // q.value='pikachu'; f.requestSubmit();
-  </script>
-
-  <footer style="margin-top:2rem;text-align:center">
-    <small>Glorfindel de Valinor - 2025.</small>
-  </footer>
+  <h1>Deu certo 🎉</h1>
+  <p>Se você está vendo isso, o Pages está servindo seu index.html.</p>
 </body>
 </html>
