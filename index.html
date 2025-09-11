@@ -183,12 +183,37 @@
         font-weight: bold;
     }
 
-    #moves-list {
+    /* --- Listas e Itens Clicáveis --- */
+    #moves-list, #abilities-list {
         list-style: none;
         padding: 0;
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
         gap: 0.5rem;
+    }
+
+    .clickable-item {
+        width: 100%;
+        text-align: left;
+        background: none;
+        border: none;
+        color: var(--primary);
+        text-decoration: underline dotted;
+        cursor: pointer;
+        padding: 0.25rem;
+        font-size: inherit;
+        font-family: inherit;
+    }
+    .clickable-item:hover {
+        background-color: var(--primary-hover);
+        color: var(--primary-inverse);
+        text-decoration: underline solid;
+    }
+    
+    /* --- Modal de Detalhes --- */
+    dialog#details-modal::backdrop {
+      background-color: rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(3px);
     }
 
     footer {
@@ -238,8 +263,19 @@
       <div id="pokemon-result">
         </div>
     </section>
-
   </main>
+  
+  <dialog id="details-modal">
+    <article>
+      <header>
+        <a href="#close" aria-label="Fechar" class="close" id="close-modal-btn"></a>
+        <h3 id="modal-title">Detalhes</h3>
+      </header>
+      <div id="modal-content">
+        <p>Carregando...</p>
+      </div>
+    </article>
+  </dialog>
   
   <footer>
     <p>Glorfindel de Valinor - 2025.</p>
@@ -255,10 +291,15 @@
       const loader = document.getElementById('loader');
       const errorMessage = document.getElementById('error-message');
       const historyContainer = document.getElementById('search-history');
+      const detailsModal = document.getElementById('details-modal');
+      const modalTitle = document.getElementById('modal-title');
+      const modalContent = document.getElementById('modal-content');
+      const closeModalBtn = document.getElementById('close-modal-btn');
       
       // --- ESTADO DA APLICAÇÃO ---
       const POKE_API_URL = 'https://pokeapi.co/api/v2/pokemon/';
       const pokemonCache = new Map();
+      const descriptionCache = new Map(); // Cache para descrições de golpes/habilidades
       let searchHistory = JSON.parse(localStorage.getItem('pokemonHistory')) || [];
 
       // --- CORES DOS TIPOS DE POKÉMON ---
@@ -272,27 +313,20 @@
       
       // --- LÓGICA DE BUSCA E RENDERIZAÇÃO ---
       
-      /**
-       * Função principal para buscar um Pokémon na API.
-       * @param {string | number} query - O nome ou número do Pokémon.
-       */
       const fetchPokemon = async (query) => {
         const searchTerm = String(query).toLowerCase().trim();
         if (!searchTerm) return;
 
-        // UI de Carregamento
         loader.classList.remove('hidden');
         errorMessage.classList.add('hidden');
         resultArea.innerHTML = '';
 
-        // 1. Verificar Cache
         if (pokemonCache.has(searchTerm)) {
           displayPokemon(pokemonCache.get(searchTerm));
           loader.classList.add('hidden');
           return;
         }
 
-        // 2. Buscar na API
         try {
           const response = await fetch(`${POKE_API_URL}${searchTerm}`);
           if (!response.ok) {
@@ -300,7 +334,6 @@
           }
           const data = await response.json();
           
-          // 3. Armazenar em cache e exibir
           pokemonCache.set(searchTerm, data);
           updateSearchHistory(data.name);
           displayPokemon(data);
@@ -312,10 +345,6 @@
         }
       };
 
-      /**
-       * Renderiza o card do Pokémon com os dados da API.
-       * @param {object} data - O objeto de dados do Pokémon.
-       */
       const displayPokemon = (data) => {
         resultArea.innerHTML = `
           <article id="pokemon-card">
@@ -339,8 +368,16 @@
 
             <details>
               <summary>Habilidades</summary>
-              <ul>
-                ${data.abilities.map(abilityInfo => `<li>${abilityInfo.ability.name.replace('-', ' ')}</li>`).join('')}
+              <ul id="abilities-list">
+                ${data.abilities.map(abilityInfo => `
+                  <li>
+                    <button class="clickable-item" 
+                            data-url="${abilityInfo.ability.url}" 
+                            data-name="${abilityInfo.ability.name}"
+                            data-type="Habilidade">
+                      ${abilityInfo.ability.name.replace(/-/g, ' ')}
+                    </button>
+                  </li>`).join('')}
               </ul>
             </details>
 
@@ -348,27 +385,21 @@
               <summary>Golpes</summary>
               <ul id="moves-list">
                 </ul>
-              ${data.moves.length > 20 ? `<button id="toggle-moves-btn" data-pokemon-moves='${JSON.stringify(data.moves)}'>Ver mais</button>` : ''}
+              ${data.moves.length > 20 ? `<button id="toggle-moves-btn" data-pokemon-moves='${JSON.stringify(data.moves.map(m => m.move))}'>Ver mais</button>` : ''}
             </details>
           </article>
         `;
 
-        renderMoves(data.moves);
+        renderMoves(data.moves.map(m => m.move));
         
         const toggleMovesBtn = document.getElementById('toggle-moves-btn');
         if (toggleMovesBtn) {
             toggleMovesBtn.addEventListener('click', handleToggleMoves);
         }
 
-        // Scroll suave até o resultado
         document.getElementById('pokemon-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
       };
 
-      /**
-       * Gera a grade de sprites de diferentes gerações.
-       * @param {object} versions - Objeto 'versions' da API.
-       * @returns {string} HTML da grade de sprites.
-       */
       const generateSpritesGrid = (versions) => {
         let spritesHtml = '';
         const generationOrder = [
@@ -379,7 +410,6 @@
         generationOrder.forEach(genKey => {
           if (versions[genKey]) {
             const genName = genKey.replace('-', ' ').toUpperCase();
-            // Pega o primeiro jogo da geração como representativo
             const gameKey = Object.keys(versions[genKey])[0];
             const spriteUrl = versions[genKey][gameKey].front_default;
             if (spriteUrl) {
@@ -395,23 +425,22 @@
         return spritesHtml.length > 0 ? spritesHtml : '<p>Nenhum sprite de geração encontrado.</p>';
       };
       
-      /**
-       * Renderiza a lista de golpes com paginação.
-       * @param {Array} moves - Array de golpes do Pokémon.
-       * @param {boolean} showAll - Se deve mostrar todos os golpes.
-       */
       const renderMoves = (moves, showAll = false) => {
         const movesList = document.getElementById('moves-list');
         if (!movesList) return;
 
         const movesToRender = showAll ? moves : moves.slice(0, 20);
-        movesList.innerHTML = movesToRender.map(moveInfo => `<li>${moveInfo.move.name.replace('-', ' ')}</li>`).join('');
+        movesList.innerHTML = movesToRender.map(moveInfo => `
+          <li>
+            <button class="clickable-item" 
+                    data-url="${moveInfo.url}" 
+                    data-name="${moveInfo.name}"
+                    data-type="Golpe">
+              ${moveInfo.name.replace(/-/g, ' ')}
+            </button>
+          </li>`).join('');
       };
       
-      /**
-       * Manipula o clique no botão "Ver mais" / "Ver menos".
-       * @param {Event} event - O evento de clique.
-       */
       const handleToggleMoves = (event) => {
         const button = event.target;
         const moves = JSON.parse(button.dataset.pokemonMoves);
@@ -426,33 +455,58 @@
         }
       };
 
-      /**
-       * Exibe uma mensagem de erro na interface.
-       * @param {string} message - A mensagem a ser exibida.
-       */
       const displayError = (message) => {
         errorMessage.textContent = `Erro: ${message}`;
         errorMessage.classList.remove('hidden');
       };
+      
+      // --- LÓGICA DE DETALHES (MODAL) ---
+      
+      const fetchAndShowDetails = async (url, name, type) => {
+        modalTitle.textContent = `${type}: ${name.replace(/-/g, ' ')}`;
+        modalContent.innerHTML = '<p aria-busy="true">Carregando descrição...</p>';
+        detailsModal.showModal();
+
+        // 1. Checar cache
+        if (descriptionCache.has(url)) {
+            modalContent.innerHTML = descriptionCache.get(url);
+            return;
+        }
+
+        // 2. Buscar na API
+        try {
+            const response = await fetch(url);
+            if (!response.ok) throw new Error('Falha na rede');
+            const data = await response.json();
+            
+            let description = '<p>Descrição não encontrada.</p>';
+
+            if (type === 'Habilidade') {
+                const effectEntry = data.effect_entries.find(e => e.language.name === 'en');
+                if (effectEntry) description = `<p>${effectEntry.effect}</p>`;
+            } else if (type === 'Golpe') {
+                const flavorTextEntry = data.flavor_text_entries.find(e => e.language.name === 'en' && (e.version_group.name === 'scarlet-violet' || e.version_group.name === 'sword-shield'));
+                if (flavorTextEntry) description = `<p>${flavorTextEntry.flavor_text}</p>`;
+            }
+            
+            // 3. Salvar no cache e exibir
+            descriptionCache.set(url, description);
+            modalContent.innerHTML = description;
+
+        } catch (error) {
+            modalContent.innerHTML = '<p>Não foi possível carregar a descrição.</p>';
+        }
+      };
 
       // --- LÓGICA DO HISTÓRICO DE BUSCAS ---
       
-      /**
-       * Atualiza o histórico de buscas no estado e no localStorage.
-       * @param {string} searchTerm - O termo de busca a ser adicionado.
-       */
       const updateSearchHistory = (searchTerm) => {
-        // Remove duplicatas e adiciona o novo termo no início
         const newHistory = [searchTerm, ...searchHistory.filter(item => item !== searchTerm)];
-        // Limita o histórico a 10 itens
         searchHistory = newHistory.slice(0, 10);
         localStorage.setItem('pokemonHistory', JSON.stringify(searchHistory));
         renderSearchHistory();
       };
       
-      /**
-       * Renderiza os chips do histórico na tela.
-       */
       const renderSearchHistory = () => {
         historyContainer.innerHTML = searchHistory
           .map(term => `<button class="outline secondary" data-search="${term}">${term}</button>`)
@@ -467,15 +521,10 @@
       const carouselContainer = document.querySelector('.carousel-container');
 
       const quotes = [
-        "Nem todo vagante é vadio.",
-        "Um mago nunca se atrasa.",
-        "Na dúvida, siga seu nariz.",
-        "Há sempre esperança.",
-        "Até a menor pessoa pode mudar o curso do futuro.",
-        "Guarde seus segredos.",
-        "Coragem, Merry. Coragem.",
-        "Eu cuidarei de você, Sam. E eu de você.",
-        "Eu preferiria compartilhar uma vida com você do que enfrentar todas as eras deste mundo sozinha.",
+        "Nem todo vagante é vadio.", "Um mago nunca se atrasa.", "Na dúvida, siga seu nariz.",
+        "Há sempre esperança.", "Até a menor pessoa pode mudar o curso do futuro.", "Guarde seus segredos.",
+        "Coragem, Merry. Coragem.", "Eu cuidarei de você, Sam. E eu de você.",
+        "Eu preferiria compartilhar uma vida com você do que enfrentar todas aseras deste mundo sozinha.",
         "Eu sou Gandalf, e Gandalf significa... eu!"
       ];
       
@@ -494,10 +543,6 @@
       const dots = () => Array.from(carouselNav.children);
 
       const moveToSlide = (targetIndex) => {
-        const currentSlide = slides()[currentIndex];
-        const targetSlide = slides()[targetIndex];
-
-        carouselTrack.style.transform = 'translateX(-' + targetSlide.style.left + ')';
         currentIndex = targetIndex;
         updateCarousel();
       };
@@ -507,24 +552,20 @@
         slides().forEach((slide, index) => {
             slide.style.left = slideWidth * index + 'px';
         });
-
         carouselTrack.style.transform = `translateX(-${slides()[currentIndex].style.left})`;
-        
         dots().forEach(dot => dot.classList.remove('current-slide'));
         dots()[currentIndex].classList.add('current-slide');
       };
 
       const startCarouselInterval = () => {
-        stopCarouselInterval(); // Garante que não haja múltiplos intervalos
+        stopCarouselInterval();
         slideInterval = setInterval(() => {
           const nextIndex = (currentIndex + 1) % slides().length;
           moveToSlide(nextIndex);
         }, 5000);
       };
 
-      const stopCarouselInterval = () => {
-        clearInterval(slideInterval);
-      };
+      const stopCarouselInterval = () => clearInterval(slideInterval);
       
       // --- EVENT LISTENERS ---
 
@@ -535,7 +576,7 @@
       });
       
       randomBtn.addEventListener('click', () => {
-        const randomId = Math.floor(Math.random() * 1025) + 1; // Existem mais de 1025 Pokémon
+        const randomId = Math.floor(Math.random() * 1025) + 1;
         fetchPokemon(randomId);
       });
 
@@ -547,7 +588,22 @@
         }
       });
       
-      // Event Listeners do Carrossel
+      // Delegação de Eventos para os itens clicáveis
+      resultArea.addEventListener('click', e => {
+        const target = e.target.closest('.clickable-item');
+        if (target) {
+            const { url, name, type } = target.dataset;
+            fetchAndShowDetails(url, name, type);
+        }
+      });
+      
+      // Listeners do Modal
+      closeModalBtn.addEventListener('click', () => detailsModal.close());
+      detailsModal.addEventListener('click', e => {
+        if (e.target === detailsModal) detailsModal.close();
+      });
+
+      // Listeners do Carrossel
       nextButton.addEventListener('click', () => {
         const nextIndex = (currentIndex + 1) % slides().length;
         moveToSlide(nextIndex);
