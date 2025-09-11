@@ -75,7 +75,6 @@
         margin: 0;
         font-style: italic;
     }
-    /* NOVO ESTILO DOS BOTÕES */
     .carousel-btn {
       position: absolute;
       top: 50%;
@@ -227,11 +226,38 @@
         text-decoration: underline solid;
     }
     
-    /* --- Modal de Detalhes --- */
+    /* --- Modal de Detalhes e Stats --- */
     dialog#details-modal::backdrop {
       background-color: rgba(0, 0, 0, 0.5);
       backdrop-filter: blur(3px);
     }
+
+    .move-stats {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        margin-bottom: 1rem;
+        padding-bottom: 1rem;
+        border-bottom: 1px solid var(--muted-border-color);
+    }
+
+    .stat-pill {
+        padding: 0.25rem 0.75rem;
+        border-radius: var(--border-radius);
+        background-color: var(--contrast-hover);
+        font-size: 0.875em;
+    }
+    
+    .damage-class {
+        color: #fff;
+        font-weight: bold;
+        text-shadow: 1px 1px 2px rgba(0,0,0,0.2);
+    }
+
+    .damage-class-physical { background-color: #C22E28; }
+    .damage-class-special { background-color: #6390F0; }
+    .damage-class-status { background-color: #8A8A8A; }
+
 
     footer {
         text-align: center;
@@ -338,19 +364,17 @@
         if (!text) return "";
         const encodedText = encodeURIComponent(text);
         const url = `https://api.mymemory.translated.net/get?q=${encodedText}&langpair=en|pt-BR`;
-        
         try {
           const response = await fetch(url);
-          if (!response.ok) return text; // Retorna original se API falhar
-          
+          if (!response.ok) return text;
           const data = await response.json();
           if (data.responseData && data.responseData.translatedText && data.responseData.match > 0.5) {
             return data.responseData.translatedText;
           }
-          return text; // Retorna original se a tradução não for boa
+          return text;
         } catch (error) {
           console.error("Translation API error:", error);
-          return text; // Retorna original em caso de erro de rede
+          return text;
         }
       };
 
@@ -469,7 +493,7 @@
       
       const fetchAndShowDetails = async (url, name, type) => {
         modalTitle.textContent = `${type}: ${name.replace(/-/g, ' ')}`;
-        modalContent.innerHTML = '<p aria-busy="true">Carregando e traduzindo descrição...</p>';
+        modalContent.innerHTML = '<p aria-busy="true">Carregando e traduzindo...</p>';
         detailsModal.showModal();
 
         if (descriptionCache.has(url)) {
@@ -477,29 +501,51 @@
             return;
         }
         try {
-            // 1. Busca dados da PokéAPI
             const response = await fetch(url);
             if (!response.ok) throw new Error('Falha na rede da PokéAPI');
             const data = await response.json();
             
-            let englishDescription = 'Descrição não encontrada.';
+            let finalHtml = '';
+
             if (type === 'Habilidade') {
                 const effectEntry = data.effect_entries.find(e => e.language.name === 'en');
-                if (effectEntry) englishDescription = effectEntry.effect;
+                const englishDescription = effectEntry ? effectEntry.effect : 'Descrição não encontrada.';
+                const translatedDescription = await translateText(englishDescription);
+                finalHtml = `<p>${translatedDescription}</p>`;
             } else if (type === 'Golpe') {
-                const flavorTextEntry = data.flavor_text_entries.find(e => e.language.name === 'en' && (e.version_group.name === 'scarlet-violet' || e.version_group.name === 'sword-shield'));
-                if (flavorTextEntry) englishDescription = flavorTextEntry.flavor_text;
-            }
+                // Extrai os dados do golpe
+                const { power, pp, accuracy, damage_class } = data;
+                const damageClassMap = {
+                    physical: { text: 'Físico', class: 'damage-class-physical' },
+                    special: { text: 'Especial', class: 'damage-class-special' },
+                    status: { text: 'Efeito', class: 'damage-class-status' }
+                };
+                const damageInfo = damageClassMap[damage_class.name] || { text: damage_class.name, class: '' };
 
-            // 2. Traduz a descrição
-            const translatedDescription = await translateText(englishDescription);
-            const finalHtml = `<p>${translatedDescription}</p>`;
+                // Monta o HTML dos stats
+                const statsHtml = `
+                    <div class="move-stats">
+                        <span class="stat-pill damage-class ${damageInfo.class}">${damageInfo.text}</span>
+                        <span class="stat-pill"><strong>PP:</strong> ${pp}</span>
+                        <span class="stat-pill"><strong>Força:</strong> ${power !== null ? power : '—'}</span>
+                        <span class="stat-pill"><strong>Precisão:</strong> ${accuracy !== null ? accuracy + '%' : '—'}</span>
+                    </div>
+                `;
+
+                // Busca e traduz a descrição
+                const flavorTextEntry = data.flavor_text_entries.find(e => e.language.name === 'en' && (e.version_group.name === 'scarlet-violet' || e.version_group.name === 'sword-shield'));
+                const englishDescription = flavorTextEntry ? flavorTextEntry.flavor_text : 'Descrição não encontrada.';
+                const translatedDescription = await translateText(englishDescription);
+                
+                finalHtml = `${statsHtml}<p>${translatedDescription}</p>`;
+            }
             
             descriptionCache.set(url, finalHtml);
             modalContent.innerHTML = finalHtml;
 
         } catch (error) {
-            modalContent.innerHTML = '<p>Não foi possível carregar a descrição.</p>';
+            console.error("Erro ao buscar detalhes:", error);
+            modalContent.innerHTML = '<p>Não foi possível carregar os detalhes.</p>';
         }
       };
 
@@ -528,14 +574,11 @@
       const fetchAdvice = async () => {
         if (Date.now() - lastApiCallTimestamp < 2000) return null;
         lastApiCallTimestamp = Date.now();
-
         try {
           const adviceResponse = await fetch(ADVICE_API_URL);
           if (!adviceResponse.ok) return "Não foi possível carregar um novo conselho.";
           const adviceData = await adviceResponse.json();
           const englishAdvice = adviceData.slip.advice;
-
-          // Usa a função de tradução reutilizável
           return await translateText(englishAdvice);
         } catch (error) {
           console.error("Erro ao buscar conselho:", error);
@@ -592,9 +635,7 @@
         carouselTrack.innerHTML = '<p aria-busy="true" style="margin: auto;">Carregando e traduzindo conselhos...</p>';
         const initialAdvices = await Promise.all([fetchAdvice(), fetchAdvice(), fetchAdvice()]);
         carouselTrack.innerHTML = '';
-        
         initialAdvices.filter(advice => advice).forEach(addSlide);
-        
         if (adviceSlips.length > 0) {
             updateCarousel();
             startCarouselInterval();
