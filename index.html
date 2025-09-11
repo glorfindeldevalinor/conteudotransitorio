@@ -12,7 +12,7 @@
     /* --- Custom Styles --- */
     :root {
       --animation-speed: 500ms;
-      --carousel-interval: 6000ms; /* Aumentei um pouco para dar tempo de ler */
+      --carousel-interval: 6000ms; 
     }
 
     body {
@@ -319,7 +319,7 @@
       
       // --- ESTADO DA APLICAÇÃO ---
       const POKE_API_URL = 'https://pokeapi.co/api/v2/pokemon/';
-      const ADVICE_API_URL = 'https://api.adviceslip.com/advice'; // <-- LINHA CORRIGIDA
+      const ADVICE_API_URL = 'https://api.adviceslip.com/advice';
       const pokemonCache = new Map();
       const descriptionCache = new Map();
       let searchHistory = JSON.parse(localStorage.getItem('pokemonHistory')) || [];
@@ -334,7 +334,6 @@
       };
       
       // --- LÓGICA DE BUSCA E RENDERIZAÇÃO POKÉMON ---
-      
       const fetchPokemon = async (query) => {
         const searchTerm = String(query).toLowerCase().trim();
         if (!searchTerm) return;
@@ -447,7 +446,6 @@
         errorMessage.classList.remove('hidden');
       };
       
-      // --- LÓGICA DE DETALHES (MODAL) ---
       const fetchAndShowDetails = async (url, name, type) => {
         modalTitle.textContent = `${type}: ${name.replace(/-/g, ' ')}`;
         modalContent.innerHTML = '<p aria-busy="true">Carregando descrição...</p>';
@@ -475,7 +473,6 @@
         }
       };
 
-      // --- LÓGICA DO HISTÓRICO DE BUSCAS ---
       const updateSearchHistory = (searchTerm) => {
         const newHistory = [searchTerm, ...searchHistory.filter(item => item !== searchTerm)];
         searchHistory = newHistory.slice(0, 10);
@@ -486,7 +483,7 @@
         historyContainer.innerHTML = searchHistory.map(term => `<button class="outline secondary" data-search="${term}">${term}</button>`).join('');
       };
 
-      // --- LÓGICA DO CARROSSEL DE CONSELHOS (API) ---
+      // --- LÓGICA DO CARROSSEL COM TRADUÇÃO ---
       const carouselTrack = document.querySelector('.carousel-track');
       const carouselNav = document.querySelector('.carousel-nav');
       const prevButton = document.querySelector('.carousel-btn.prev');
@@ -499,30 +496,45 @@
       let lastApiCallTimestamp = 0;
 
       const fetchAdvice = async () => {
-        // Cache de 2 segundos para não sobrecarregar a API
+        // Cache de 2 segundos para não sobrecarregar as APIs
         if (Date.now() - lastApiCallTimestamp < 2000) return null;
         lastApiCallTimestamp = Date.now();
 
         try {
-          const response = await fetch(ADVICE_API_URL);
-          if (!response.ok) return "Não foi possível carregar um novo conselho.";
-          const data = await response.json();
-          return data.slip.advice;
+          // 1. Busca o conselho original em inglês
+          const adviceResponse = await fetch(ADVICE_API_URL);
+          if (!adviceResponse.ok) return "Não foi possível carregar um novo conselho.";
+          const adviceData = await adviceResponse.json();
+          const englishAdvice = adviceData.slip.advice;
+
+          // 2. Monta a URL para a API de tradução MyMemory
+          const translationUrl = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(englishAdvice)}&langpair=en|pt-BR`;
+          
+          // 3. Busca a tradução
+          const translationResponse = await fetch(translationUrl);
+          if (!translationResponse.ok) return englishAdvice; // Se a tradução falhar, retorna o original
+          
+          const translationData = await translationResponse.json();
+          
+          // Se a tradução for boa (score de match > 0.5), usa ela. Senão, usa o original.
+          if (translationData.responseData && translationData.responseData.translatedText && translationData.responseStatus === 200 && translationData.responseData.match > 0.5) {
+            return translationData.responseData.translatedText;
+          } else {
+            return englishAdvice; // Retorna o original se a tradução não for confiável
+          }
+
         } catch (error) {
+          console.error("Erro ao buscar ou traduzir conselho:", error);
           return "Verifique sua conexão de rede.";
         }
       };
 
       const addSlide = (advice) => {
         adviceSlips.push(advice);
-        
-        // Adiciona o slide
         const slide = document.createElement('div');
         slide.classList.add('carousel-slide');
         slide.innerHTML = `<blockquote>“${advice}”</blockquote>`;
         carouselTrack.appendChild(slide);
-
-        // Adiciona o indicador
         const indicator = document.createElement('button');
         indicator.classList.add('carousel-indicator');
         indicator.dataset.index = adviceSlips.length - 1;
@@ -530,9 +542,9 @@
       };
 
       const updateCarousel = () => {
+        if (!carouselTrack.clientWidth) return;
         const slideWidth = carouselTrack.clientWidth;
         carouselTrack.style.transform = `translateX(-${currentIndex * slideWidth}px)`;
-        
         const indicators = Array.from(carouselNav.children);
         indicators.forEach((dot, index) => {
             dot.classList.toggle('current-slide', index === currentIndex);
@@ -545,15 +557,13 @@
       };
       
       const moveNext = async () => {
-        // Se estamos no último slide, busca um novo
-        if (currentIndex === adviceSlips.length - 1) {
+        if (currentIndex >= adviceSlips.length - 1) {
           const newAdvice = await fetchAdvice();
           if (newAdvice) {
             addSlide(newAdvice);
           }
         }
-        
-        const nextIndex = (currentIndex + 1) % adviceSlips.length;
+        const nextIndex = Math.min(currentIndex + 1, adviceSlips.length - 1);
         moveTo(nextIndex);
       };
 
@@ -566,7 +576,6 @@
 
       const setupCarousel = async () => {
         carouselTrack.innerHTML = '<p aria-busy="true" style="margin: auto;">Carregando conselhos...</p>';
-        // Carrega 3 conselhos iniciais
         const initialAdvices = await Promise.all([fetchAdvice(), fetchAdvice(), fetchAdvice()]);
         carouselTrack.innerHTML = '';
         
@@ -588,10 +597,9 @@
       closeModalBtn.addEventListener('click', () => detailsModal.close());
       detailsModal.addEventListener('click', e => { if (e.target === detailsModal) detailsModal.close(); });
       
-      // Listeners do Carrossel
       nextButton.addEventListener('click', moveNext);
       prevButton.addEventListener('click', () => {
-        const prevIndex = (currentIndex - 1 + adviceSlips.length) % adviceSlips.length;
+        const prevIndex = Math.max(currentIndex - 1, 0);
         moveTo(prevIndex);
       });
       carouselNav.addEventListener('click', e => { const targetDot = e.target.closest('button'); if (targetDot) moveTo(parseInt(targetDot.dataset.index)); });
