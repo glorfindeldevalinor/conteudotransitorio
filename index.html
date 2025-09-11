@@ -333,6 +333,27 @@
         steel: '#B7B7CE', fairy: '#D685AD'
       };
       
+      // --- FUNÇÃO DE TRADUÇÃO REUTILIZÁVEL ---
+      const translateText = async (text) => {
+        if (!text) return "";
+        const encodedText = encodeURIComponent(text);
+        const url = `https://api.mymemory.translated.net/get?q=${encodedText}&langpair=en|pt-BR`;
+        
+        try {
+          const response = await fetch(url);
+          if (!response.ok) return text; // Retorna original se API falhar
+          
+          const data = await response.json();
+          if (data.responseData && data.responseData.translatedText && data.responseData.match > 0.5) {
+            return data.responseData.translatedText;
+          }
+          return text; // Retorna original se a tradução não for boa
+        } catch (error) {
+          console.error("Translation API error:", error);
+          return text; // Retorna original em caso de erro de rede
+        }
+      };
+
       // --- LÓGICA DE BUSCA E RENDERIZAÇÃO POKÉMON ---
       const fetchPokemon = async (query) => {
         const searchTerm = String(query).toLowerCase().trim();
@@ -448,26 +469,35 @@
       
       const fetchAndShowDetails = async (url, name, type) => {
         modalTitle.textContent = `${type}: ${name.replace(/-/g, ' ')}`;
-        modalContent.innerHTML = '<p aria-busy="true">Carregando descrição...</p>';
+        modalContent.innerHTML = '<p aria-busy="true">Carregando e traduzindo descrição...</p>';
         detailsModal.showModal();
+
         if (descriptionCache.has(url)) {
             modalContent.innerHTML = descriptionCache.get(url);
             return;
         }
         try {
+            // 1. Busca dados da PokéAPI
             const response = await fetch(url);
-            if (!response.ok) throw new Error('Falha na rede');
+            if (!response.ok) throw new Error('Falha na rede da PokéAPI');
             const data = await response.json();
-            let description = '<p>Descrição não encontrada.</p>';
+            
+            let englishDescription = 'Descrição não encontrada.';
             if (type === 'Habilidade') {
                 const effectEntry = data.effect_entries.find(e => e.language.name === 'en');
-                if (effectEntry) description = `<p>${effectEntry.effect}</p>`;
+                if (effectEntry) englishDescription = effectEntry.effect;
             } else if (type === 'Golpe') {
                 const flavorTextEntry = data.flavor_text_entries.find(e => e.language.name === 'en' && (e.version_group.name === 'scarlet-violet' || e.version_group.name === 'sword-shield'));
-                if (flavorTextEntry) description = `<p>${flavorTextEntry.flavor_text}</p>`;
+                if (flavorTextEntry) englishDescription = flavorTextEntry.flavor_text;
             }
-            descriptionCache.set(url, description);
-            modalContent.innerHTML = description;
+
+            // 2. Traduz a descrição
+            const translatedDescription = await translateText(englishDescription);
+            const finalHtml = `<p>${translatedDescription}</p>`;
+            
+            descriptionCache.set(url, finalHtml);
+            modalContent.innerHTML = finalHtml;
+
         } catch (error) {
             modalContent.innerHTML = '<p>Não foi possível carregar a descrição.</p>';
         }
@@ -496,35 +526,19 @@
       let lastApiCallTimestamp = 0;
 
       const fetchAdvice = async () => {
-        // Cache de 2 segundos para não sobrecarregar as APIs
         if (Date.now() - lastApiCallTimestamp < 2000) return null;
         lastApiCallTimestamp = Date.now();
 
         try {
-          // 1. Busca o conselho original em inglês
           const adviceResponse = await fetch(ADVICE_API_URL);
           if (!adviceResponse.ok) return "Não foi possível carregar um novo conselho.";
           const adviceData = await adviceResponse.json();
           const englishAdvice = adviceData.slip.advice;
 
-          // 2. Monta a URL para a API de tradução MyMemory
-          const translationUrl = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(englishAdvice)}&langpair=en|pt-BR`;
-          
-          // 3. Busca a tradução
-          const translationResponse = await fetch(translationUrl);
-          if (!translationResponse.ok) return englishAdvice; // Se a tradução falhar, retorna o original
-          
-          const translationData = await translationResponse.json();
-          
-          // Se a tradução for boa (score de match > 0.5), usa ela. Senão, usa o original.
-          if (translationData.responseData && translationData.responseData.translatedText && translationData.responseStatus === 200 && translationData.responseData.match > 0.5) {
-            return translationData.responseData.translatedText;
-          } else {
-            return englishAdvice; // Retorna o original se a tradução não for confiável
-          }
-
+          // Usa a função de tradução reutilizável
+          return await translateText(englishAdvice);
         } catch (error) {
-          console.error("Erro ao buscar ou traduzir conselho:", error);
+          console.error("Erro ao buscar conselho:", error);
           return "Verifique sua conexão de rede.";
         }
       };
@@ -575,7 +589,7 @@
       const stopCarouselInterval = () => clearInterval(slideInterval);
 
       const setupCarousel = async () => {
-        carouselTrack.innerHTML = '<p aria-busy="true" style="margin: auto;">Carregando conselhos...</p>';
+        carouselTrack.innerHTML = '<p aria-busy="true" style="margin: auto;">Carregando e traduzindo conselhos...</p>';
         const initialAdvices = await Promise.all([fetchAdvice(), fetchAdvice(), fetchAdvice()]);
         carouselTrack.innerHTML = '';
         
